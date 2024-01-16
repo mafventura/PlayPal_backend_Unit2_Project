@@ -30,20 +30,15 @@ const userSchema = new mongoose.Schema({
     }
 })
 
-const librarySchema = new mongoose.Schema({
-    game: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Game'
-    }
-})
-
 const gameSchema = new mongoose.Schema({
     gameName: String,
+    cover: String
+
 })
 
 const playerSchema = new mongoose.Schema({
     playerName: String,
-    
+    playerImg: String
 })
 
 const logSchema = new mongoose.Schema({
@@ -51,7 +46,8 @@ const logSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Game'
     },
-    duration: String,
+    durationHours: Number,
+    durationMinutes: Number,
     scores: [{
         player: {
             type: mongoose.Schema.Types.ObjectId,
@@ -64,8 +60,6 @@ const logSchema = new mongoose.Schema({
 })
 
 const User = mongoose.model('User', userSchema)
-
-const Library = mongoose.model('Library', librarySchema)
 
 const Game = mongoose.model('Game', gameSchema)
 
@@ -82,60 +76,73 @@ app.get('/', (req, res) => {
     })
 })
 
-// Library - All added Games
+// Games - All added Games
 app.get('/games', async (req, res) => {
-    const games = await Library.find({}).populate('game')
+    const games = await Game.find({})
     res.json(games)
 })
 
 // Games - Single View of a Game
 app.get('/games/:gameId', async (req, res) => {
-    const game = await Game.findById(req.params.id)
+    const game = await Game.findById(req.params.gameId)
     res.json(game)
 })
 
 // Players - Show All Players
 app.get('/players', async (req, res) => {
-    const player = await Player.find({}).sort('playerName')
-    res.json(player)
+    const players = await Player.find({}).sort('playerName')
+    res.json(players)
 })
 
 // Players - Show Single Players
 app.get('/players/:playerId', async (req, res) => {
-    const player = await Player.findById(req.params.id)
+    const player = await Player.findById(req.params.playerId)
     res.json(player)
 })
 
+// Logs - Show All Logs
+app.get('/logs', async (req, res) => {
+    const logs = await Log.find({})
+    res.json(logs)
+})
+
+
 // Logs - Show Single Log From Game
-app.get('/log/:log_id', async (req, res) => {
-    const log = await Log.findById(req.params.id)
+app.get('/logs/:logId', async (req, res) => {
+    const log = await Log.findById(req.params.logId)
     res.json(log)
 })
 
 // User - Show User Info
-app.get('/user', async (req, res) => {
-    const user = await User.findById(req.params.id)
+app.get('/users', async (req, res) => {
+    const user = await User.find({})
+    res.json(user)
+})
+
+// User - Show User Info
+app.get('/users/userId', async (req, res) => {
+    const user = await User.findById(req.params.userId)
     res.json(user)
 })
 
 // * POST'S ---------------------------------------------------------------------------------------------------------------------------------------
 
-//Library - Add a New Game
+//Games - Add a New Game
 app.post('/games/add', async (req, res) => {
     try {
         const game = req.body
         const newGame = new Game({
-            gameName: game.gameName
+            gameName: game.gameName,
+            cover: game.cover
         })
 
-        newGame.save()
+        await newGame.save()
 
         console.log('Game saved to MongoDB:', newGame);
-        res.json(newGame);
         res.sendStatus(200)
 
     } catch (error) {
-        console.error('Error saving new game to MongoDB:', err);
+        console.error('Error saving new game to MongoDB:', error);
         res.status(500).send('Error saving new game to MongoDB');
     }
 })
@@ -144,36 +151,35 @@ app.post('/players/add', async (req, res) => {
     try {
         const player = req.body
         const newPlayer = new Player({
-            playerName: player.playerName
+            playerName: player.playerName,
+            playerImg: player.playerImg
         })
 
-        newPlayer.save()
+        await newPlayer.save()
 
         console.log('Player saved to MongoDB:', newPlayer);
-        res.json(newPlayer);
         res.sendStatus(200)
 
     } catch (error) {
-        console.error('Error saving new player to MongoDB:', err);
+        console.error('Error saving new player to MongoDB:', error);
         res.status(500).send('Error saving new player to MongoDB');
     }
 })
 
-app.post('/user/add', async (req, res) => {
+app.post('/users/add', async (req, res) => {
     try {
         const user = req.body
         const newUser = new User({
             userId: user.userId,
         })
 
-        newUser.save()
+        await newUser.save()
 
         console.log('User saved to MongoDB:', newUser);
-        res.json(newUser);
         res.sendStatus(200)
 
     } catch (error) {
-        console.error('Error saving new user to MongoDB:', err);
+        console.error('Error saving new user to MongoDB:', error);
         res.status(500).send('Error saving new user to MongoDB');
     }
 })
@@ -183,21 +189,21 @@ app.post('/logs/add', async (req, res) => {
         const log = req.body
         const newLog = new Log({
             game: log.gameId,
-            duration: log.duration,
+            durationHours: log.durationHours,
+            durationMinutes: log.durationMinutes,
             scores: log.scores.map(scoreValues => ({
                 player: scoreValues.playerId,
                 score: scoreValues.score
             }))
         })
 
-        newLog.save()
+        await newLog.save()
 
         console.log('Log saved to MongoDB:', newLog);
-        res.json(newLog);
         res.sendStatus(200)
 
     } catch (error) {
-        console.error('Error saving new log to MongoDB:', err);
+        console.error('Error saving new log to MongoDB:', error);
         res.status(500).send('Error saving new log to MongoDB');
     }
 })
@@ -205,42 +211,47 @@ app.post('/logs/add', async (req, res) => {
 // * PUT'S ---------------------------------------------------------------------------------------------------------------------------------------
 app.put('/games/:gameId', async (req, res) => {
     try {
-        await Game.findByIdAndUpdate({"_id": req.params.id}, {gameName: req.body.gameName}, { new: true })
+        await Game.findByIdAndUpdate({"_id": req.params.gameId}, {gameName: req.body.gameName, cover: req.body.cover}, { new: true })
 
-        console.log('Game edit saved to MongoDB:', updatedGame);
+        console.log('Game edit saved to MongoDB');
         res.sendStatus(200)
 
     } catch (error) {
-        console.error('Error editing game to MongoDB:', err);
+        console.error('Error editing game to MongoDB:', error);
         res.status(500).send('Error editing game  to MongoDB');
     }
 })
 
-app.put('/log/:logId', async (req, res) => {
+app.put('/logs/:logId', async (req, res) => {
     try {
-        await Log.findByIdAndUpdate({"_id": req.params.id}, {
+        await Log.findByIdAndUpdate({"_id": req.params.logId}, {
             game: req.body.gameId,
-            duration: req.body.duration,
-            scores: req.body.map(scoreValues => ({
+            durationHours: req.body.durationHours,
+            durationMinutes: req.body.durationMinutes,
+            scores: req.body.scores.map(scoreValues => ({
                 player: scoreValues.playerID,
                 score: scoreValues.score
             }))
         }, { new: true })
 
-        console.log('Log edit saved to MongoDB:', updatedLog);
+        console.log('Log edit saved to MongoDB');
         res.sendStatus(200)
 
     } catch (error) {
-        console.error('Error editing log to MongoDB:', err);
+        console.error('Error editing log to MongoDB:', error);
         res.status(500).send('Error editing log  to MongoDB');
     }
 })
 
-app.put('/players/playerId', async (req, res) => {
+app.put('/players/:playerId', async (req, res) => {
     try {
-        await Player.findByIdAndUpdate({"_id": req.params.id}, {playerName: req.body.playerName}, { new: true })
+        await Player.findByIdAndUpdate({"_id": req.params.playerId}, {playerName: req.body.playerName, playerImg: req.body.playerImg}, { new: true })
+
+        console.log('Player edit saved to MongoDB');
+        res.sendStatus(200)
     } catch (error) {
-        
+        console.error('Error editing player to MongoDB:', error);
+        res.status(500).send('Error editing player  to MongoDB');
     }
 })
 
@@ -249,36 +260,36 @@ app.put('/players/playerId', async (req, res) => {
 
 app.delete('/games/:gameId', async (req, res) => {
     try {
-        await Game.deleteOne({"_id": req.params.id})
+        await Game.deleteOne({"_id": req.params.gameId})
 
-        console.log('Deleted game from MongoDB:', newLog);
+        console.log('Deleted game from MongoDB');
         res.sendStatus(200)
     } catch (error) {
-        console.error('Error deleting game from MongoDB:', err);
+        console.error('Error deleting game from MongoDB:', error);
         res.status(500).send('Error deleting game from MongoDB');
     }
 })
 
-app.delete('/log/:logId', async (req, res) => {
+app.delete('/logs/:logId', async (req, res) => {
     try {
-        await Log.deleteOne({"_id": req.params.id})
+        await Log.deleteOne({"_id": req.params.logId})
 
-        console.log('Deleted log from MongoDB:', newLog);
+        console.log('Deleted log from MongoDB');
         res.sendStatus(200)
     } catch (error) {
-        console.error('Error deleting log from MongoDB:', err);
+        console.error('Error deleting log from MongoDB:', error);
         res.status(500).send('Error deleting log from MongoDB');
     }
 })
 
 app.delete('/players/:playerId', async (req, res) => {
     try {
-        await Player.deleteOne({"_id": req.params.id})
+        await Player.deleteOne({"_id": req.params.playerId})
 
-        console.log('Deleted player from MongoDB:', newLog);
+        console.log('Deleted player from MongoDB');
         res.sendStatus(200)
     } catch (error) {
-        console.error('Error deleting player from MongoDB:', err);
+        console.error('Error deleting player from MongoDB:', error);
         res.status(500).send('Error deleting player from MongoDB');
     }
 })
