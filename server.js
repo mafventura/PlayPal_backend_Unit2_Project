@@ -9,8 +9,6 @@ const app = express()
 
 app.use(cors())
 app.use(bodyParser.json())
-app.use('/games', getUserByEmail)
-app.use('/players', getUserByEmail)
 
 const port = process.env.PORT
 
@@ -80,29 +78,6 @@ const Player = mongoose.model('Player', playerSchema)
 
 const Log = mongoose.model('Log', logSchema)
 
-async function getUserByEmail(req, res, next) {
-    try {
-        const userEmail = req.query.userEmail
-
-        if(!userEmail) {
-            return res.status(400).json({ message: 'User email is required.' })
-        }
-
-        const user = await User.findOne({userEmail})
-
-        if(!user) {
-            return res.status(400).json({ message: 'User not found.' })
-        }
-
-        req.user = user;
-        next()
-
-    } catch (error) {
-        console.error('Error getting user by email:', error)
-        res.status(500).json({ message: 'Internal Server Error'})
-    }
-}
-
 // * GET'S ---------------------------------------------------------------------------------------------------------------------------------------
 
 // Main Welcome Page
@@ -114,8 +89,13 @@ app.get('/', (req, res) => {
 
 // Games - All added Games
 app.get('/games', async (req, res) => {
-    const games = await Game.find({ user: req.user._id }).sort('gameName')
-    res.json(games)
+    const userEmail = req.headers['user-email']
+    const user = await User.findOne({ 'userEmail': userEmail })
+    const games = await Game.find({}).sort('gameName')
+    const gamesfiltered = games.filter((game) => {
+        return game.user.equals(user._id)  
+    })
+    res.json(gamesfiltered)
 })
 
 // Games - Single View of a Game
@@ -126,8 +106,14 @@ app.get('/games/:gameId', async (req, res) => {
 
 // Players - Show All Players
 app.get('/players', async (req, res) => {
-    const players = await Player.find({ user: req.user._id }).sort('playerName')
-    res.json(players)
+    const userEmail = req.headers['user-email']
+    const user = await User.findOne({ 'userEmail': userEmail })
+    const players = await Player.find({ }).sort('playerName')
+    const playersfiltered = players.filter((player) => {
+        console.log(player);
+        return player.user.equals(user._id)
+    })
+    res.json(playersfiltered)
 })
 
 // Players - Show Single Players
@@ -192,8 +178,9 @@ app.post('/games/add', async (req, res) => {
 app.post('/players/add', async (req, res) => {
     try {
         const player = req.body
-        console.log(req.body);
-        const user = await User.findOne({"userEmail": player.user})
+        const userEmail = req.headers['user-email']
+        const user = await User.findOne({"userEmail": userEmail})
+        console.log('user', user);
         const newPlayer = new Player({
             user,
             playerName: player.playerName,
@@ -245,8 +232,11 @@ app.post('/users/add', async (req, res) => {
 
 app.post('/log/add/:gameId', async (req, res) => {
     try {
+        const userEmail = req.headers['user-email']
+        const user = await User.findOne({ 'userEmail': userEmail })
         const log = req.body
         const newLog = new Log({
+            user: user._id,
             game: req.params.gameId,
             durationHours: log.durationHours,
             durationMinutes: log.durationMinutes,
