@@ -9,6 +9,8 @@ const app = express()
 
 app.use(cors())
 app.use(bodyParser.json())
+app.use('/games', getUserByEmail)
+app.use('/players', getUserByEmail)
 
 const port = process.env.PORT
 
@@ -19,7 +21,6 @@ app.listen(port, () => {
 mongoose.connect(process.env.DATABASE_URL)
 
 const userSchema = new mongoose.Schema({
-    userId: String,
     userEmail: {
         type: String,
         required: true
@@ -31,17 +32,29 @@ const userSchema = new mongoose.Schema({
 })
 
 const gameSchema = new mongoose.Schema({
+    user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
     gameName: String,
     cover: String
 
 })
 
 const playerSchema = new mongoose.Schema({
+    user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
     playerName: String,
     playerImg: String
 })
 
 const logSchema = new mongoose.Schema({
+    user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
     game: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Game'
@@ -67,6 +80,29 @@ const Player = mongoose.model('Player', playerSchema)
 
 const Log = mongoose.model('Log', logSchema)
 
+async function getUserByEmail(req, res, next) {
+    try {
+        const userEmail = req.query.userEmail
+
+        if(!userEmail) {
+            return res.status(400).json({ message: 'User email is required.' })
+        }
+
+        const user = await User.findOne({userEmail})
+
+        if(!user) {
+            return res.status(400).json({ message: 'User not found.' })
+        }
+
+        req.user = user;
+        next()
+
+    } catch (error) {
+        console.error('Error getting user by email:', error)
+        res.status(500).json({ message: 'Internal Server Error'})
+    }
+}
+
 // * GET'S ---------------------------------------------------------------------------------------------------------------------------------------
 
 // Main Welcome Page
@@ -78,7 +114,7 @@ app.get('/', (req, res) => {
 
 // Games - All added Games
 app.get('/games', async (req, res) => {
-    const games = await Game.find({})
+    const games = await Game.find({ user: req.user._id }).sort('gameName')
     res.json(games)
 })
 
@@ -90,7 +126,7 @@ app.get('/games/:gameId', async (req, res) => {
 
 // Players - Show All Players
 app.get('/players', async (req, res) => {
-    const players = await Player.find({}).sort('playerName')
+    const players = await Player.find({ user: req.user._id }).sort('playerName')
     res.json(players)
 })
 
@@ -102,14 +138,18 @@ app.get('/players/:playerId', async (req, res) => {
 
 // Logs - Show All Logs
 app.get('/logs', async (req, res) => {
-    const logs = await Log.find({})
+    const logs = await Log.find({}).populate({
+        path: 'scores.player',
+        model: 'Player',
+        select: 'playerName playerImg'
+    })
     res.json(logs)
 })
 
 
 // Logs - Show Single Log From Game
 app.get('/logs/:logId', async (req, res) => {
-    const log = await Log.findById(req.params.logId)
+    const log = await Log.findById(req.params.logId).populate('game')
     res.json(log)
 })
 
@@ -120,7 +160,7 @@ app.get('/users', async (req, res) => {
 })
 
 // User - Show User Info
-app.get('/users/userId', async (req, res) => {
+app.get('/users/:userId', async (req, res) => {
     const user = await User.findById(req.params.userId)
     res.json(user)
 })
@@ -131,7 +171,9 @@ app.get('/users/userId', async (req, res) => {
 app.post('/games/add', async (req, res) => {
     try {
         const game = req.body
+        const user = await User.findOne({"userEmail": game.user})
         const newGame = new Game({
+            user,
             gameName: game.gameName,
             cover: game.cover
         })
@@ -150,7 +192,10 @@ app.post('/games/add', async (req, res) => {
 app.post('/players/add', async (req, res) => {
     try {
         const player = req.body
+        console.log(req.body);
+        const user = await User.findOne({"userEmail": player.user})
         const newPlayer = new Player({
+            user,
             playerName: player.playerName,
             playerImg: player.playerImg
         })
@@ -168,27 +213,41 @@ app.post('/players/add', async (req, res) => {
 
 app.post('/users/add', async (req, res) => {
     try {
+        const now = new Date()
         const user = req.body
-        const newUser = new User({
-            userId: user.userId,
-        })
 
-        await newUser.save()
+        const existingUser = await User.findOne({ userEmail: user.userEmail })
 
-        console.log('User saved to MongoDB:', newUser);
+        if(!existingUser) {
+            const newUser = new User({
+                userEmail: user.userEmail,
+                lastLogin: now
+            })
+
+            await newUser.save()
+
+            console.log('New user saved to MongoDB:', newUser);
+            res.sendStatus(200)
+        
+        } else {
+            await User.findOneAndUpdate({"userEmail": user.userEmail}, {lastLogin: now})
+            console.log('User updated to MongoDB');
         res.sendStatus(200)
+        }
+        
+        
 
     } catch (error) {
-        console.error('Error saving new user to MongoDB:', error);
-        res.status(500).send('Error saving new user to MongoDB');
+        console.error('Error saving/updating user to MongoDB:', error);
+        res.status(500).send('Error saving/updating user to MongoDB');
     }
 })
 
-app.post('/logs/add', async (req, res) => {
+app.post('/log/add/:gameId', async (req, res) => {
     try {
         const log = req.body
         const newLog = new Log({
-            game: log.gameId,
+            game: req.params.gameId,
             durationHours: log.durationHours,
             durationMinutes: log.durationMinutes,
             scores: log.scores.map(scoreValues => ({
