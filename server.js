@@ -124,11 +124,7 @@ app.get('/players/:playerId', async (req, res) => {
 
 // Logs - Show All Logs
 app.get('/logs', async (req, res) => {
-    const logs = await Log.find({}).populate({
-        path: 'scores.player',
-        model: 'Player',
-        select: 'playerName playerImg'
-    })
+    const logs = await Log.find({}).populate('scores.player')
     res.json(logs)
 })
 
@@ -235,27 +231,37 @@ app.post('/log/add/:gameId', async (req, res) => {
         const userEmail = req.headers['user-email']
         const user = await User.findOne({ 'userEmail': userEmail })
         const log = req.body
-        const newLog = new Log({
+        console.log('LOG.body:', log);
+
+        const logEntry = new Log({
             user: user._id,
             game: req.params.gameId,
             durationHours: log.durationHours,
             durationMinutes: log.durationMinutes,
-            scores: log.scores.map(scoreValues => ({
-                player: scoreValues.playerId,
+            scores: []
+        });
+
+        const promises = log.scores.map(async (scoreValues) => {
+            const player = await Player.findOne({ 'playerName': scoreValues.playerName });
+
+            logEntry.scores.push({
+                player: player._id,
                 score: scoreValues.score
-            }))
-        })
+            });
+        });
 
-        await newLog.save()
+        await Promise.all(promises);
 
-        console.log('Log saved to MongoDB:', newLog);
-        res.sendStatus(200)
+        await logEntry.save();
+
+        console.log('Log saved to MongoDB:', logEntry);
+        res.sendStatus(200);
 
     } catch (error) {
         console.error('Error saving new log to MongoDB:', error);
         res.status(500).send('Error saving new log to MongoDB');
     }
-})
+    });
 
 // * PUT'S ---------------------------------------------------------------------------------------------------------------------------------------
 app.put('/games/:gameId', async (req, res) => {
