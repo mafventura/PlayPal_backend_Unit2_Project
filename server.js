@@ -292,7 +292,7 @@ app.put('/logs/:logId', async (req, res) => {
     }
 })
 
-app.put('/players/:playerId', async (req, res) => {
+app.put('/players/edit/:playerId', async (req, res) => {
     try {
         await Player.findByIdAndUpdate({"_id": req.params.playerId}, {playerName: req.body.playerName, playerImg: req.body.playerImg}, { new: true })
 
